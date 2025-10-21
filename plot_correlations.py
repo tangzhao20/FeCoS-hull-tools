@@ -3,6 +3,8 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# python plot_correlations.py processed_data.csv --outdir plots
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("processed_csv", help="CSV with Eform, Ehull, Js columns")
