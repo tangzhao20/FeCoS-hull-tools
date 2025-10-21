@@ -27,4 +27,42 @@ Notes
 	•	For near-stable visualization, increase tolerance: --zero-tol 2e-3.
 
 Files
-	•	compute_energies.py – reads ra
+	•	compute_energies.py – reads raw_data.csv, writes processed_data.csv. Uses pymatgen PhaseDiagram.
+	•	plot_correlations.py – scatter plots of Eform/Ehull vs Js into --outdir.
+	•	ternary_ehull_plot.py – ternary (Fe top, Co BL, S BR), color by Ehull, stable in black, Gibbs tie-lines, dashed grid. No pymatgen.
+	•	ternary_js_plot.py – same ternary, color by Js. No pymatgen.
+	•	list_gibbs_triangles.py – prints/writes all Gibbs triangles (facet triplets) by formulas. No pymatgen.
+	•	raw_data.csv – example input.
+	•	processed_data.csv – example output produced by compute_energies.py.
+
+CLI reference
+	•	compute_energies.py
+	•	input_csv (positional), -o/--output_csv (default processed_data.csv)
+	•	plot_correlations.py
+	•	processed_csv (positional), --outdir (default .)
+	•	ternary_ehull_plot.py
+	•	--in, --out, --max-ehull (default 0.5), --zero-tol (default 1e-6), --facet-tol (default 1e-4), --dpi
+	•	ternary_js_plot.py
+	•	--in, --out, --js-min (default 0), --js-max (default 2.5), --zero-tol, --facet-tol, --dpi
+	•	list_gibbs_triangles.py
+	•	--in, --out (optional), --zero-tol (default 1e-6), --facet-tol (default 1e-4)
+
+FeCoS-hull-tools/
+├─ compute_energies.py
+├─ plot_correlations.py
+├─ ternary_ehull_plot.py
+├─ ternary_js_plot.py
+├─ list_gibbs_triangles.py
+├─ raw_data.csv             # example input
+├─ processed_data.csv       # example output
+├─ plots/
+│  ├─ Eform_vs_Js.png       # example Eform vs Js (optional)
+│  ├─ Ehull_vs_Js.png       # example Ehull vs Js (optional)
+│  ├─ Ehull_vs_Js_ylim2.png # example Ehull vs Js zoomed in (optional)
+│  ├─ FeCoS_PD.png          # example Ehull ternary (optional)
+│  └─ ternary_Js.png        # example Js ternary (optional)
+├─ requirements.txt
+├─ .gitignore
+└─ README.md
+
+
