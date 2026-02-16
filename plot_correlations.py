@@ -13,6 +13,9 @@ def main():
 
     df = pd.read_csv(args.processed_csv)
 
+    # exclude those index are not numbers
+    df = df[pd.to_numeric(df['index'], errors='coerce').notna()]
+
     # 1) Formation energy vs Js (Js on x, Eform on y)
     plt.figure()
     plt.scatter(
