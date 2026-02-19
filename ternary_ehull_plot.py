@@ -48,7 +48,9 @@ def formula_from_counts(nFe: int, nCo: int, nS: int) -> str:
     for el, n in (("Fe", nFe), ("Co", nCo), ("S", nS)):
         if n <= 0:
             continue
-        parts.append(f"{el}{'' if n==1 else n}")
+        parts.append(el)
+        if n > 1:
+            parts.append(r"$_{" + f"{n}" + r"}$")
     return "".join(parts) if parts else "—"
 
 def fractions_from_counts(nFe: int, nCo: int, nS: int) -> Tuple[float, float, float]:
@@ -191,7 +193,7 @@ def sort_and_connect(points, ax, **kwargs):
     return segs
 
 def choose_label_position(x, y, taken_boxes, text, ax, renderer, avoid_lines, edge_clearance=0.022):
-    r_list = np.arange(0.02, 0.1, 0.005)
+    r_list = np.arange(0.02, 0.07, 0.005)
     angles = np.linspace(0, 2*np.pi, 48, endpoint=False)
     def get_text_bbox(xp, yp):
         t = ax.text(xp, yp, text, fontsize=8, ha="center", va="center", color="black",
@@ -334,7 +336,7 @@ def main():
         sc = ax.scatter(x_u, y_u, c=e_u, s=28, cmap='rainbow', vmin=0.0, vmax=args.max_ehull,
                         edgecolors='none', zorder=2)
         cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label("E_hull (eV/atom)")
+        cbar.set_label(r"$E_\mathrm{hull}$ (eV/atom)")
 
     # Stable points (bigger, with white edge so they pop)
     if len(stable_pts):
@@ -371,7 +373,9 @@ def main():
         placed: List[Tuple[float,float,float,float]] = []
         avoid_lines = triangle_edges + binary_segments + ternary_segments + grid_segments
         for (x, y, text, _, _, _) in stable_pts:
-            xp, yp = choose_label_position(x, y, placed, text, ax, renderer, avoid_lines, edge_clearance=0.022)
+            if text in ["Fe", "Co", "S"]:
+                continue
+            xp, yp = choose_label_position(x, y, placed, text, ax, renderer, avoid_lines, edge_clearance=0.01)
             t = ax.text(xp, yp, text, fontsize=8, ha="center", va="center", color="black",
                         bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=0.2), zorder=5)
             fig.canvas.draw()
