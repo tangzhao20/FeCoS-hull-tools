@@ -29,19 +29,11 @@ from typing import Tuple, List, Dict, Set
 
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-
+import matplotlib.colors as mcolors
 
 # ----------------------------- small helpers -----------------------------
-
-def gcd3(a: int, b: int, c: int) -> int:
-    from math import gcd
-    return gcd(gcd(abs(a), abs(b)), abs(c))
-
-def reduce_composition(nFe: int, nCo: int, nS: int) -> Tuple[int, int, int]:
-    g = gcd3(max(nFe, 0), max(nCo, 0), max(nS, 0))
-    g = g if g > 0 else 1
-    return (nFe // g, nCo // g, nS // g)
 
 def formula_from_counts(nFe: int, nCo: int, nS: int) -> str:
     parts = []
@@ -53,18 +45,19 @@ def formula_from_counts(nFe: int, nCo: int, nS: int) -> str:
             parts.append(r"$_{" + f"{n}" + r"}$")
     return "".join(parts) if parts else "—"
 
-def fractions_from_counts(nFe: int, nCo: int, nS: int) -> Tuple[float, float, float]:
-    tot = nFe + nCo + nS
-    if tot <= 0:
-        return (0.0, 0.0, 0.0)
-    return (nFe / tot, nCo / tot, nS / tot)
-
-def barycentric_to_xy(fFe: float, fCo: float, fS: float) -> Tuple[float, float]:
+def barycentric_to_xy(nFe, nCo, nS) -> Tuple[float, float]:
     # Equilateral triangle: Fe at (0.5, sqrt(3)/2), Co at (0,0), S at (1,0)
-    h = math.sqrt(3)/2.0
+    ntot = nFe + nCo + nS
+    fFe = nFe / ntot
+    fS = nS / ntot
     x = fS + 0.5*fFe
-    y = h*fFe
+    y = 0.5*3.0**0.5*fFe
     return x, y
+
+def triangle_vertices():
+    h = 0.5*3.0**0.5
+    Fe = (0.5, h); Co = (0.0, 0.0); S = (1.0, 0.0)
+    return Fe, Co, S, h
 
 def is_segment_intersect(line1, line2, tol=1e-6):
     """
@@ -147,22 +140,16 @@ def is_box_intersect(box1, box2, edge_clearance, tol=1e-6):
 
     return True
 
-def triangle_vertices():
-    h = math.sqrt(3)/2.0
-    Fe = (0.5, h); Co = (0.0, 0.0); S = (1.0, 0.0)
-    return Fe, Co, S, h
-
-
 # ----------------------------- drawing bits -----------------------------
 
 def plot_triangle(ax):
     Fe, Co, S, h = triangle_vertices()
-    ax.plot([Co[0], S[0]],[Co[1], S[1]], color='#222', lw=1.6, zorder=1)
-    ax.plot([S[0], Fe[0]],[S[1], Fe[1]], color='#222', lw=1.6, zorder=1)
-    ax.plot([Fe[0], Co[0]],[Fe[1], Co[1]], color='#222', lw=1.6, zorder=1)
-    ax.text(Fe[0], Fe[1]+0.04, "Fe", ha="center", va="bottom", fontsize=11, fontweight="bold")
-    ax.text(Co[0]-0.04, Co[1]-0.03, "Co", ha="right", va="top", fontsize=11, fontweight="bold")
-    ax.text(S[0]+0.04,  S[1]-0.03, "S",  ha="left",  va="top", fontsize=11, fontweight="bold")
+    # ax.plot([Co[0], S[0]],[Co[1], S[1]], color='#1a1b26', lw=1, zorder=1)
+    # ax.plot([S[0], Fe[0]],[S[1], Fe[1]], color='#1a1b26', lw=1, zorder=1)
+    # ax.plot([Fe[0], Co[0]],[Fe[1], Co[1]], color='#1a1b26', lw=1, zorder=1)
+    ax.text(Fe[0], Fe[1]+0.03, "Fe", ha="center", va="bottom", color="#1a1b26")
+    ax.text(Co[0]-0.03, Co[1]-0.02, "Co", ha="right", va="top", color="#1a1b26")
+    ax.text(S[0]+0.03,  S[1]-0.02, "S",  ha="left", va="top", color="#1a1b26")
     ax.set_aspect('equal', adjustable='box')
     ax.set_xlim(-0.05, 1.05); ax.set_ylim(-0.05, h+0.08)
     ax.axis('off')
@@ -171,7 +158,7 @@ def plot_triangle(ax):
 def draw_gridlines(ax, steps=(0.2, 0.4, 0.6, 0.8)):
     segs = []
     def add_line(p1, p2):
-        ax.plot([p1[0], p2[0]],[p1[1], p2[1]], 'k--', lw=0.5, alpha=0.25, zorder=0.5)
+        ax.plot([p1[0], p2[0]],[p1[1], p2[1]], lw=1, color="#c6c6c9", zorder=0.5)
         segs.append((p1, p2))
     for t in steps:
         # const Fe = t
@@ -182,29 +169,31 @@ def draw_gridlines(ax, steps=(0.2, 0.4, 0.6, 0.8)):
         add_line(barycentric_to_xy(1-t, 0, t), barycentric_to_xy(0, 1-t, t))
     return segs
 
-def sort_and_connect(points, ax, **kwargs):
+def sort_and_connect(points, ax):
     if not points: return []
     pts = sorted(points, key=lambda p: (p[0], p[1]))
     segs = []
     for i in range(len(pts)-1):
         p1, p2 = pts[i], pts[i+1]
-        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], **kwargs)
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color='#1a1b26', linewidth=1, zorder=2.0)
         segs.append((p1, p2))
     return segs
 
-def choose_label_position(x, y, taken_boxes, text, ax, renderer, avoid_lines, edge_clearance=0.022):
-    r_list = np.arange(0.02, 0.07, 0.005)
-    angles = np.linspace(0, 2*np.pi, 48, endpoint=False)
+def choose_label_position(x, y, angle, taken_boxes, text, ax, renderer, avoid_lines, edge_clearance=0.02):
+    r_list = np.arange(0.02, 0.15, 0.005)
+    start_angle = (angle+np.pi/6.0+1.e-6)//(2.0*np.pi/3.0)*(2.0*np.pi/3.0)-np.pi/6.0
+    angles = np.linspace(start_angle, start_angle+2.0*np.pi, 48, endpoint=False)
+
     def get_text_bbox(xp, yp):
-        t = ax.text(xp, yp, text, fontsize=8, ha="center", va="center", color="black",
-                    bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=0.2),
-                    zorder=5)
-        plt.draw()
+        t = ax.text(xp, yp, text, ha="center", va="center", color="#1a1b26", fontsize=10,
+                    bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=0.1), zorder=5)
+        # plt.draw()
         bb = t.get_window_extent(renderer=renderer)
         inv = ax.transData.inverted()
         (x0, y0), (x1, y1) = inv.transform(bb)
         t.remove()
         return (x0, y0, x1, y1)
+
     for r in r_list:
         for ang in angles:
             dx, dy = r*math.cos(ang), r*math.sin(ang)
@@ -214,8 +203,9 @@ def choose_label_position(x, y, taken_boxes, text, ax, renderer, avoid_lines, ed
                 continue
             if any(is_line_box_intersect(line, current_box, edge_clearance) for line in avoid_lines):
                 continue
+            # print(f"{text:20s}: r = {r:.3f}, angle = {math.degrees(ang):.1f}°")
             return xp, yp
-    return x, y+0.03
+    return x, y+0.05
 
 
 # ----------------------------- lower-hull (tie-lines) -----------------------------
@@ -265,12 +255,12 @@ def lower_hull_edges_xy(stable_xyz: List[Tuple[float,float,float]], tol: float =
 
 def main():
     ap = argparse.ArgumentParser(description="Ternary (Fe top, Co BL, S BR): stable black; others rainbow by Ehull; binary + ternary tie-lines; grid.")
-    ap.add_argument("--in", dest="input_csv", required=True, help="processed_data.csv")
+    ap.add_argument("--in", dest="input_csv", default="processed_data.csv", help="processed_data.csv")
     ap.add_argument("--out", dest="output_png", default="ternary_Ehull.png", help="Output PNG")
     ap.add_argument("--max-ehull", type=float, default=0.5, help="Colorbar upper limit (clip)")
     ap.add_argument("--zero-tol", type=float, default=1e-6, help="Stability tolerance for Ehull≈0")
-    ap.add_argument("--facet-tol", type=float, default=1e-4, help="Lower-hull inequality tolerance (z ≥ ax+by+c - tol)")
-    ap.add_argument("--dpi", type=int, default=200, help="Figure DPI")
+    ap.add_argument("--facet-tol", type=float, default=1e-6, help="Lower-hull inequality tolerance (z ≥ ax+by+c - tol)")
+    ap.add_argument("--dpi", type=int, default=1200, help="Figure DPI")
     args = ap.parse_args()
 
     df = pd.read_csv(args.input_csv)
@@ -289,7 +279,8 @@ def main():
     best: Dict[Tuple[int,int,int], Dict] = {}
     for _, r in df.iterrows():
         nFe, nCo, nS = int(r["nFe"]), int(r["nCo"]), int(r["nS"])
-        key = reduce_composition(nFe, nCo, nS)
+        gcd = math.gcd(nFe, nCo, nS)
+        key = (nFe//gcd, nCo//gcd, nS//gcd)
         eh  = float(r[col_eh])
         if key not in best or eh < best[key][col_eh]:
             best[key] = {
@@ -311,19 +302,23 @@ def main():
 
     for key, rec in best.items():
         nFe, nCo, nS = rec["nFe"], rec["nCo"], rec["nS"]
-        fFe, fCo, fS = fractions_from_counts(nFe, nCo, nS)
-        x, y = barycentric_to_xy(fFe, fCo, fS)
+        x, y = barycentric_to_xy(nFe, nCo, nS)
+        angle = math.atan2(y-3.0**0.5/6.0, x-0.5)
         eh   = float(rec[col_eh])
         ef   = float(rec[col_ef])
         pts.append((x, y, eh))
         if abs(eh) <= args.zero_tol:
-            stable_pts.append((x, y, rec["formula"], nFe, nCo, nS))
+            stable_pts.append((x, y, rec["formula"], nFe, nCo, nS, angle))
             stable_xyz_all.append((x, y, ef))
+
+    stable_pts.sort(key=lambda p: (p[6] + np.pi/6.0+1e-6) % (2 * math.pi))
 
     if not pts:
         raise RuntimeError("No points to plot after grouping by composition.")
 
-    fig, ax = plt.subplots(figsize=(7.4, 6.9), dpi=args.dpi)
+    fig, ax = plt.subplots(figsize=(5, 3.75), dpi=args.dpi)
+    mpl.rcParams["font.sans-serif"].insert(0, "Noto Sans")
+    mpl.rcParams.update({'font.size': 14})
     triangle_edges = plot_triangle(ax)
     grid_segments  = draw_gridlines(ax, steps=(0.2, 0.4, 0.6, 0.8))
 
@@ -332,20 +327,38 @@ def main():
     x_all, y_all, e_all = arr[:,0], arr[:,1], arr[:,2]
     mask_unst = e_all > args.zero_tol
     x_u, y_u, e_u = x_all[mask_unst], y_all[mask_unst], np.clip(e_all[mask_unst], 0.0, args.max_ehull)
+
+    # set up a new color map
+    colors = [
+        "#bb9af7", "#9aa6ff", "#72b4ff", "#3fc0f8", "#00c9e0", "#00cfc1",
+        "#4ecf9d", "#83cb77", "#aec255", "#d2b741", "#edaa48", "#ff9e64"
+    ]
+    my_cmap = mcolors.LinearSegmentedColormap.from_list("my_palette", colors)
+
+    # sort the data points before plots
     if len(x_u):
-        sc = ax.scatter(x_u, y_u, c=e_u, s=28, cmap='rainbow', vmin=0.0, vmax=args.max_ehull,
-                        edgecolors='none', zorder=2)
-        cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$E_\mathrm{hull}$ (eV/atom)")
+        sort_idx = np.argsort(e_u)[::-1]
+        x_u = x_u[sort_idx]
+        y_u = y_u[sort_idx]
+        e_u = e_u[sort_idx]
+        sc = ax.scatter(x_u, y_u, c=e_u, s=12, cmap=my_cmap, vmin=0.0, vmax=args.max_ehull, linewidth=0.25,
+                        edgecolors='white', zorder=2.5)
+
+    # set up colorbar
+    cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label(r"$E_\mathrm{hull}$ (eV/atom)", color="#1a1b26")
+    cbar.outline.set_linewidth(1)
+    cbar.outline.set_edgecolor("#1a1b26")
+    cbar.ax.tick_params(direction='in', width=1, color="#c6c6c9", labelcolor="#1a1b26")
 
     # Stable points (bigger, with white edge so they pop)
     if len(stable_pts):
         xs = [p[0] for p in stable_pts]; ys = [p[1] for p in stable_pts]
-        ax.scatter(xs, ys, s=80, c='black', edgecolors='white', linewidths=0.7, zorder=4)
+        ax.scatter(xs, ys, s=12, c='#1a1b26', edgecolors='white', linewidths=0.25, zorder=4)
 
     # Binary hull polylines on triangle edges (stable points on each edge)
     FeCo_edge, CoS_edge, FeS_edge = [], [], []
-    for (x, y, _, nFe, nCo, nS) in stable_pts:
+    for (x, y, _, nFe, nCo, nS, _) in stable_pts:
         if nS == 0: FeCo_edge.append((x,y))
         if nFe == 0: CoS_edge.append((x,y))
         if nCo == 0: FeS_edge.append((x,y))
@@ -354,9 +367,9 @@ def main():
         if p not in edge: edge.append(p)
 
     binary_segments = []
-    binary_segments += sort_and_connect(FeCo_edge, ax, color='k', lw=1.6, zorder=2.6)
-    binary_segments += sort_and_connect(CoS_edge, ax, color='k', lw=1.6, zorder=2.6)
-    binary_segments += sort_and_connect(FeS_edge, ax, color='k', lw=1.6, zorder=2.6)
+    binary_segments += sort_and_connect(FeCo_edge, ax)
+    binary_segments += sort_and_connect(CoS_edge, ax)
+    binary_segments += sort_and_connect(FeS_edge, ax)
 
     # Full Gibbs network from LOWER convex hull across ALL stable vertices (elements+binaries+ternaries)
     ternary_segments = []
@@ -364,7 +377,7 @@ def main():
         edges = lower_hull_edges_xy(stable_xyz_all, tol=args.facet_tol)
         for (p, q) in edges:
             (x1,y1), (x2,y2) = p, q
-            ax.plot([x1,x2],[y1,y2], color='k', lw=1.5, alpha=0.95, zorder=3.1)
+            ax.plot([x1,x2],[y1,y2], color='#1a1b26', lw=1, zorder=2.0)
             ternary_segments.append((p,q))
 
     # Labels (avoid all lines)
@@ -372,12 +385,12 @@ def main():
         renderer = fig.canvas.get_renderer()
         placed: List[Tuple[float,float,float,float]] = []
         avoid_lines = triangle_edges + binary_segments + ternary_segments + grid_segments
-        for (x, y, text, _, _, _) in stable_pts:
+        for (x, y, text, _, _, _, angle) in stable_pts:
             if text in ["Fe", "Co", "S"]:
                 continue
-            xp, yp = choose_label_position(x, y, placed, text, ax, renderer, avoid_lines, edge_clearance=0.01)
-            t = ax.text(xp, yp, text, fontsize=8, ha="center", va="center", color="black",
-                        bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=0.2), zorder=5)
+            xp, yp = choose_label_position(x, y, angle, placed, text, ax, renderer, avoid_lines, edge_clearance=0.01)
+            t = ax.text(xp, yp, text, ha="center", va="center", color="#1a1b26", fontsize=10, 
+                        bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=0.1), zorder=5)
             fig.canvas.draw()
             (x0,y0),(x1,y1) = ax.transData.inverted().transform(t.get_window_extent(renderer=renderer))
             placed.append((x0,y0,x1,y1))
@@ -386,7 +399,6 @@ def main():
     plt.tight_layout()
     plt.savefig(args.output_png, dpi=args.dpi)
     print(f"Saved {args.output_png}")
-
 
 if __name__ == "__main__":
     main()
